@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Model weights and builds
+*.gguf
+*.bin
+models/
+llama.cpp/
+
+# Experiment outputs (traces go to S3; keep summaries via analysis scripts)
+runs/*
+!runs/.gitkeep
+
+# Secrets and local config
+.env
+*.pem
+*.key
+aws_credentials*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,6 @@
+openai>=1.40,<2        # client for the llama.cpp OpenAI-compatible server
+pydantic>=2.7,<3       # JSON schemas for agent outputs and trace records
+pyyaml>=6,<7           # run configs
+pytest>=8,<9
+pandas>=2.2,<3         # analysis
+matplotlib>=3.9,<4     # plots
