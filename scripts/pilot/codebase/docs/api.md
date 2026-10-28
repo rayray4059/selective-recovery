@@ -26,7 +26,7 @@ The old key `timeout` was renamed to `timeout_s` and is no longer accepted.
 
 ## Charges
 
-`payments.charge(client, amount_cents, currency, idempotency_key)`
+`payments.charge(client, amount_cents, currency, idempotency_key=None)`
 
 - Every charge **must** carry a non-empty `idempotency_key` string. The processor uses it to
   drop duplicate charges when a request is resent.

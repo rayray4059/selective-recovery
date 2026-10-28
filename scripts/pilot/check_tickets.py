@@ -15,14 +15,18 @@ from pathlib import Path
 PILOT = Path(__file__).resolve().parent
 
 
-def run_hidden_test(workspace: Path, test_file: Path) -> bool:
-    """Copy the test into the workspace, run it with pytest, and return True if it passes."""
+def run_pytest(workspace: Path, test_file: Path) -> subprocess.CompletedProcess:
+    """Copy the test into the workspace and run it with pytest."""
     shutil.copy(test_file, workspace / test_file.name)
-    result = subprocess.run(
+    return subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", test_file.name],
-        cwd=workspace, capture_output=True, text=True,
+        cwd=workspace, capture_output=True, text=True, timeout=60,
     )
-    return result.returncode == 0
+
+
+def run_hidden_test(workspace: Path, test_file: Path) -> bool:
+    """Return True if the hidden test passes in the workspace."""
+    return run_pytest(workspace, test_file).returncode == 0
 
 
 def fresh_workspace(root: Path) -> Path:
