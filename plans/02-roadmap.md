@@ -5,7 +5,7 @@ Phase 1 is due Nov 4. Steps are in build order. Dates are targets.
 | # | Step | Target | Status | Plan |
 | --- | --- | --- | --- | --- |
 | 1 | Repo scaffold | Oct 27 | Done | `steps/step-01-repo.md` |
-| 2 | Model pilot: can a model solve tiny coding tickets? | Oct 29 | **Next** | `steps/step-02-model-pilot.md` |
+| 2 | Model pilot: can a model solve tiny coding tickets? | Oct 29 | **In progress** | `steps/step-02-model-pilot.md` |
 | 3 | Coding environment: workspace as a git repo, file and test tools, registry and channel | Oct 30 | Not started | (to write) |
 | 4 | Tasks (tickets), hidden tests, and the outcome checker | Oct 31 | Not started | `steps/step-04-tasks.md` |
 | 5 | Agents: researcher, planner, executor with fixed prompts and JSON outputs | Oct 31 | Not started | (to write) |

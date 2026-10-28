@@ -54,3 +54,21 @@ conditions.
 On the owner's M4 Pro MacBook Pro (macOS 15.1), llama.cpp via Homebrew with Metal.
 Record `llama-server --version` and the model's `shasum -a 256` in `RESULTS.md`.
 Pilot speeds are Mac speeds; final runs move to AWS (see `../01-decisions.md`).
+
+## Progress
+
+- [x] 2026-10-27: llama.cpp installed (Homebrew 0.7.0, build 11669, commit `620d2225c`)
+- [x] 2026-10-27: Qwen3.5 4B Q4_K_M downloaded to `~/models/`
+  - repo `bartowski/Qwen_Qwen3.5-4B-GGUF`, revision `4168f45a16a1290d65a4ec0fa312ae917a4c15d6`
+  - file `Qwen_Qwen3.5-4B-Q4_K_M.gguf`, sha256 `13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983`
+- [x] 2026-10-27: smoke test on Metal: valid JSON at temp 0, ~41 tok/s generation
+  - server: `llama-server -m ~/models/Qwen_Qwen3.5-4B-Q4_K_M.gguf --port 8080 -ngl 99 -c 8192`
+  - requests send `"chat_template_kwargs": {"enable_thinking": false}`
+- [x] 2026-10-27: fake codebase `scripts/pilot/codebase/` (`billing/` errors, config, client,
+  payments) and `docs/conventions.md`, `docs/api.md`
+- [x] 2026-10-27: five tickets in `scripts/pilot/tickets.jsonl`, hidden tests in `hidden_tests/`,
+  reference fixes in `solutions/`. `check_tickets.py` confirms each test fails on the original
+  and passes with its fix. Fixes are 1–8 lines, smaller than the planned 5–20.
+  `doc_fact` in each ticket is for labeling failures and must not be shown to the agents.
+- [x] 2026-10-27: Python 3.11 `.venv` built from a conda `py311` env (no system 3.11 on the Mac)
+- [ ] Test A, Test B, `RESULTS.md`, decision
