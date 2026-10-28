@@ -2,9 +2,11 @@
 
 Failure propagation and recovery in a multi-agent workflow (CSE 291A, Fall 2026, Option 5).
 
-A researcher -> planner -> executor workflow resolves simulated customer-operations tasks.
-We inject faults into intermediate results, trace how they spread through artifacts and shared
-state, and measure what recovery costs.
+A researcher -> planner -> executor workflow completes small tickets on a fake Python
+codebase. We inject faults into intermediate results, trace how they spread through artifacts
+and shared state (files, a simulated registry and channel), and measure what recovery costs.
+
+Project plans, decisions and per-step guides live in [`plans/`](plans/README.md).
 
 - **Phase 1 (due Nov 4):** clean baseline, fault-injection harness, provenance traces,
   full-restart and always-verify baselines, measurements.
