@@ -49,6 +49,8 @@ conditions.
   and the llama.cpp commit.
 - The decision recorded in `../01-decisions.md`.
 
-## Open
+## Where it runs
 
-- Laptop OS and RAM. With 16 GB or more, run the pilot locally; otherwise use AWS.
+On the owner's M4 Pro MacBook Pro (macOS 15.1), llama.cpp via Homebrew with Metal.
+Record `llama-server --version` and the model's `shasum -a 256` in `RESULTS.md`.
+Pilot speeds are Mac speeds; final runs move to AWS (see `../01-decisions.md`).
