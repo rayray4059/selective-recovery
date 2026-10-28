@@ -71,4 +71,20 @@ Pilot speeds are Mac speeds; final runs move to AWS (see `../01-decisions.md`).
   and passes with its fix. Fixes are 1–8 lines, smaller than the planned 5–20.
   `doc_fact` in each ticket is for labeling failures and must not be shown to the agents.
 - [x] 2026-10-27: Python 3.11 `.venv` built from a conda `py311` env (no system 3.11 on the Mac)
-- [ ] Test A, Test B, `RESULTS.md`, decision
+- [x] 2026-10-27: Test A (`scripts/pilot/test_a.py`, temp 0.7, top_p 0.8, seeds 0–2): **9/15**,
+  ~6 s per task. t1 3/3, t2 2/3, t3 1/3, t4 0/3, t5 3/3. Run in `runs/pilot_test_a_20261027_200437`.
+  - t4's 0/3 is a ticket bug: `api.md` shows `idempotency_key` as a required positional
+    argument, so the model's code raises `TypeError` instead of `BillingError`. Fix the doc
+    signature to `idempotency_key=None` and rerun t4. (Done; see decisions log.)
+  - t3 misses: dropped keyword-only `*` (real model misses). t2 miss: invented rounding.
+- [x] 2026-10-27: Test A rerun with the fixed doc: **10/15**, ~5.7 s per task. t1 3/3, t2 2/3,
+  t3 1/3, t4 1/3, t5 3/3. Run in `runs/pilot_test_a_20261027_203103`. **This is the Test A result
+  of record.**
+  - t4 misses are now real: the model still writes `idempotency_key` with no default, so a call
+    without it raises `TypeError` before its (correct) `BillingError` check runs.
+  - t1, t2, t3, t5 gave identical outcomes to the first run with the same seeds, so runs are
+    reproducible on this setup.
+  - Pattern: 4 of 5 misses get the doc fact right but miss a Python signature detail
+    (keyword-only `*`, `=None` default). 1 miss (t2) misapplies the fact: it invents a rounding
+    trick instead of `ROUND_HALF_UP`. Syntax errors: 0. Missing code blocks: 0.
+- [ ] Test B, `RESULTS.md`, decision
