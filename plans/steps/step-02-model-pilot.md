@@ -87,4 +87,18 @@ Pilot speeds are Mac speeds; final runs move to AWS (see `../01-decisions.md`).
   - Pattern: 4 of 5 misses get the doc fact right but miss a Python signature detail
     (keyword-only `*`, `=None` default). 1 miss (t2) misapplies the fact: it invents a rounding
     trick instead of `ROUND_HALF_UP`. Syntax errors: 0. Missing code blocks: 0.
-- [ ] Test B, `RESULTS.md`, decision
+- [x] 2026-10-27: Test B (`scripts/pilot/test_b.py`, same settings and seeds as A; executor never
+  sees the docs): **7/15**, ~18 s per task. t1 3/3, t2 2/3, t3 0/3, t4 1/3, t5 1/3. Valid JSON:
+  researcher 14/15, planner 12/14. Run in `runs/pilot_test_b_20261027_203755`.
+  - Below the 9/15 bar, while A passed (10/15). Decision rule says: model is fine, fix the hand-offs.
+  - Researcher is accurate: it reported keyword-only for t3 in 3/3 runs and `=None` for t4 in 2/3.
+    But it dumps every fact in the docs (7–13 per ticket), not just the relevant ones.
+  - Planner is the weak link. It drops the signature detail the researcher gave it (t3 3/3,
+    t4 2/2 of the parsed failures), and irrelevant facts pull it off-task (t5 seed 2 added an
+    idempotency check to `Client.send`; t3 seed 0 rambled to the 2048-token cap).
+  - Invalid JSON (3): an unescaped `"` inside a fact string; code with a raw newline in
+    `new_signature`; the 2048-token ramble above.
+  - Possible fixes, **not applied here** (see decisions log): llama.cpp JSON-schema constrained
+    output; researcher reports only facts relevant to the ticket; planner copies documented
+    signatures verbatim. Carry them into Step 5 and judge them on the dev set.
+- [ ] Model decision, `RESULTS.md`
