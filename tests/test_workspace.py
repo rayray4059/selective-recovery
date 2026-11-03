@@ -37,3 +37,10 @@ def test_rollback_restores_and_removes_new_files(tmp_path):
     ws.rollback(ws.init_commit)
     assert (ws.path / "pkg" / "a.py").read_text() == "x = 1\n"
     assert ws.files() == ["pkg/a.py"]
+
+
+def test_changed_since_includes_uncommitted_and_deleted(tmp_path):
+    ws = make_ws(tmp_path)
+    (ws.path / "pkg" / "a.py").unlink()
+    (ws.path / "new.txt").write_text("x")
+    assert ws.changed_since(ws.init_commit) == ["new.txt", "pkg/a.py"]

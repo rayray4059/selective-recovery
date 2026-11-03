@@ -38,6 +38,10 @@ class Workspace:
         out = self.git("diff", "--name-only", a, b)
         return out.splitlines() if out else []
 
+    def changed_since(self, sha):
+        out = self.git("diff", "--name-only", sha) + "\n" + self.git("ls-files", "--others", "--exclude-standard")
+        return sorted(set(x for x in out.splitlines() if x))
+
     def files(self):
         out = self.git("ls-files", "--cached", "--others", "--exclude-standard")
         return sorted(out.splitlines()) if out else []
