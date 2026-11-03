@@ -37,6 +37,7 @@ class Task(BaseModel):
     expected: Expected
     allowed: Allowed
     codebase: str = "codebase"
+    faults: dict = {}
 
 
 def load_tasks(path=TASKS_DIR / "dev.jsonl"):

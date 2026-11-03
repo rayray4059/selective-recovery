@@ -27,7 +27,8 @@ def path_of(rec):
     return os.path.normpath(p) if p else None
 
 
-def build_trace(log, calls=(), actions=(), facts=None, plan=None):
+def build_trace(log, calls=(), actions=(), facts=None, plan=None, injected=None):
+    injected = injected or {}
     nodes = []
     last_write = {}
     reads = {"researcher": [], "planner": [], "executor": []}
@@ -55,6 +56,8 @@ def build_trace(log, calls=(), actions=(), facts=None, plan=None):
             call = llm["researcher"][0]
             made["facts"] = add("facts", "researcher", 1, "facts", reads["researcher"],
                                 facts if facts is not None else call["reply"], call=call)
+            if "facts" in injected:
+                nodes[-1]["injected"] = injected["facts"]
 
     def make_plan():
         make_facts()
@@ -62,6 +65,8 @@ def build_trace(log, calls=(), actions=(), facts=None, plan=None):
             call = llm["planner"][0]
             made["plan"] = add("plan", "planner", 2, "plan", [made.get("facts")] + reads["planner"],
                                plan if plan is not None else call["reply"], call=call)
+            if "plan" in injected:
+                nodes[-1]["injected"] = injected["plan"]
 
     def make_turn(a, rec=None):
         make_plan()

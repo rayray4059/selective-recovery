@@ -1,3 +1,4 @@
+import copy
 import json
 import time
 from pathlib import Path
@@ -30,20 +31,31 @@ def agent_totals(calls):
     return totals
 
 
-def run_task(task, llm, run_dir, hook=None):
+def run_task(task, llm, run_dir, hook=None, fault=None):
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     env = Environment(Workspace(run_dir / "ws", source=TASKS_DIR / task.codebase))
+    if fault:
+        hook = fault.hook
+        fault.setup(env)
     hook = hook or (lambda stage, x: x)
+    label = fault.name if fault else "hook"
+    injected = {}
     start = time.time()
 
     env.step = 1
     facts, calls = research(env, llm, task)
+    before = copy.deepcopy(facts)
     facts = hook("facts", facts)
+    if facts != before:
+        injected["facts"] = label
     env.step = 2
     plan, more = plan_change(env, llm, task, facts)
     calls += more
+    before = copy.deepcopy(plan)
     plan = hook("plan", plan)
+    if plan != before:
+        injected["plan"] = label
     env.step = 3
     actions, more = execute(env, llm, task, plan, facts)
     calls += more
@@ -51,7 +63,8 @@ def run_task(task, llm, run_dir, hook=None):
 
     res = check(task, env)
     res.update({"task": task.id, "wall_s": wall_s, "agents": agent_totals(calls),
-                "registry": env.registry, "channel": env.channel})
+                "registry": env.registry, "channel": env.channel,
+                "fault": fault.info() if fault else None, "injected": injected})
     (run_dir / "config.json").write_text(json.dumps({
         "task": task.id, "model": llm.model, "seed": llm.seed,
         "temperature": llm.temperature, "max_tokens": llm.max_tokens,
@@ -60,7 +73,7 @@ def run_task(task, llm, run_dir, hook=None):
     save_jsonl(run_dir / "llm_calls.jsonl", calls)
     save_jsonl(run_dir / "tool_log.jsonl", env.log)
     t0 = time.time()
-    nodes = build_trace(env.log, calls, actions, facts, plan)
+    nodes = build_trace(env.log, calls, actions, facts, plan, injected)
     save_jsonl(run_dir / "trace.jsonl", nodes)
     res["trace"] = {
         "nodes": len(nodes),
