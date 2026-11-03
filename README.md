@@ -14,7 +14,14 @@ pip install -r requirements.txt
 Model: Qwen3.5 4B Q4_K_M served with llama.cpp:
 
 ```
-llama-server -m ~/models/Qwen_Qwen3.5-4B-Q4_K_M.gguf --port 8080 -ngl 99 -c 8192
+llama-server -m ~/models/Qwen_Qwen3.5-4B-Q4_K_M.gguf --port 8080 -ngl 99 -c 16384
+```
+
+## Running
+
+```
+python3 -m pytest -q tests
+python3 scripts/run_tasks.py --tasks tasks/dev.jsonl
 ```
 
 ## Pilot
