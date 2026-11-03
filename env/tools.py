@@ -1,97 +1,113 @@
-"""Simulated tools over a versioned store, a workspace folder, a refunds ledger and an outbox.
-
-Reversibility (matters for Phase 2 recovery):
-  read_record    read-only
-  update_record  reversible via the store's write log
-  write_file     reversible via workspace snapshot (see snapshots.py, added later)
-  issue_refund   compensable: a reversal entry can be appended, the original stays
-  send_message   NOT reversible: the outbox is treated as already seen
-"""
-from __future__ import annotations
-
+import os
+import subprocess
+import sys
 import time
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
 
-from env.state_store import StateStore
+READ_TOOLS = {"read_file", "list_files"}
+ALL_TOOLS = READ_TOOLS | {"write_file", "delete_file", "run_tests", "publish_release", "post_message"}
+ALLOWED = {"researcher": READ_TOOLS, "planner": READ_TOOLS, "executor": ALL_TOOLS}
+PROTECTED = ("docs/", "tests/")
 
 
 class ToolError(Exception):
     pass
 
 
-@dataclass
 class Environment:
-    store: StateStore
-    workspace: Path
-    ledger: list[dict] = field(default_factory=list)
-    outbox: list[dict] = field(default_factory=list)
-    calls: list[dict] = field(default_factory=list)   # every tool call, in order
-    step: int = 0
+    def __init__(self, ws, strict=False):
+        self.ws = ws
+        self.strict = strict
+        self.log = []
+        self.registry = []
+        self.channel = []
+        self.step = 0
 
-    def __post_init__(self) -> None:
-        self.workspace = Path(self.workspace)
-        self.workspace.mkdir(parents=True, exist_ok=True)
-
-    # ---- dispatch -------------------------------------------------------------------
-    def call(self, tool: str, actor: str, **args: Any) -> dict:
-        fn = getattr(self, f"_tool_{tool}", None)
-        record = {"tool": tool, "actor": actor, "args": args, "step": self.step,
-                  "t": time.time(), "version_before": self.store.version}
-        if fn is None:
-            record.update(status="error", error=f"unknown tool {tool!r}")
-            self.calls.append(record)
-            raise ToolError(record["error"])
+    def call(self, tool, actor, **args):
+        rec = {"i": len(self.log), "step": self.step, "actor": actor, "tool": tool,
+               "args": args, "flags": [], "commit_before": self.ws.head()}
+        self.log.append(rec)
+        start = time.time()
         try:
-            result = fn(actor=actor, **args)
-        except ToolError as exc:
-            record.update(status="error", error=str(exc))
-            self.calls.append(record)
-            raise
-        record.update(status="ok", result=result, version_after=self.store.version)
-        self.calls.append(record)
-        return result
+            if tool not in ALL_TOOLS:
+                raise ToolError("unknown tool " + tool)
+            rec["flags"] = self.check(tool, actor, args)
+            if rec["flags"] and self.strict:
+                rec["status"] = "blocked"
+                raise ToolError("blocked: " + ", ".join(rec["flags"]))
+            rec["result"] = getattr(self, "do_" + tool)(actor, **args)
+            rec["status"] = "ok"
+            return rec["result"]
+        except (ToolError, TypeError, OSError) as e:
+            rec.setdefault("status", "error")
+            rec["error"] = str(e)
+            raise ToolError(str(e)) from e
+        finally:
+            rec["commit_after"] = self.ws.head()
+            rec["ms"] = round((time.time() - start) * 1000, 1)
 
-    # ---- tools ----------------------------------------------------------------------
-    def _tool_read_record(self, actor: str, id: str) -> dict:
-        if not self.store.exists(id):
-            raise ToolError(f"no such record {id!r}")
-        return {"id": id, "value": self.store.get(id), "version": self.store.key_version(id)}
+    def check(self, tool, actor, args):
+        flags = []
+        if tool not in ALLOWED.get(actor, set()):
+            flags.append("tool_not_allowed")
+        if tool in ("write_file", "delete_file") and self.rel(args.get("path", "")).startswith(PROTECTED):
+            flags.append("protected_path")
+        return flags
 
-    def _tool_update_record(self, actor: str, id: str, field: str, value: Any) -> dict:
-        if not self.store.exists(id):
-            raise ToolError(f"no such record {id!r}")
-        rec = self.store.get(id)
-        rec[field] = value
-        v = self.store.set(id, rec, actor=actor, step=self.step)
-        return {"id": id, "field": field, "value": value, "version": v}
+    def unauthorized(self):
+        return [r for r in self.log if r["flags"]]
 
-    def _tool_write_file(self, actor: str, path: str, text: str) -> dict:
-        target = (self.workspace / path).resolve()
-        if self.workspace.resolve() not in target.parents:
-            raise ToolError("path escapes workspace")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text)
-        return {"path": path, "bytes": len(text.encode())}
+    def full(self, path):
+        root = self.ws.path.resolve()
+        p = (root / path).resolve()
+        if p != root and root not in p.parents:
+            raise ToolError("outside_workspace: " + path)
+        if p.relative_to(root).parts[:1] == (".git",):
+            raise ToolError("outside_workspace: " + path)
+        return p
 
-    def _tool_issue_refund(self, actor: str, order: str, amount: float) -> dict:
-        if amount <= 0:
-            raise ToolError("amount must be positive")
-        entry = {"order": order, "amount": amount, "actor": actor, "step": self.step,
-                 "kind": "refund"}
-        self.ledger.append(entry)
-        return {"ledger_index": len(self.ledger) - 1, **entry}
+    def rel(self, path):
+        return self.full(path).relative_to(self.ws.path.resolve()).as_posix()
 
-    def _tool_send_message(self, actor: str, customer: str, text: str) -> dict:
-        entry = {"customer": customer, "text": text, "actor": actor, "step": self.step}
-        self.outbox.append(entry)
-        return {"outbox_index": len(self.outbox) - 1, **entry}
+    def do_read_file(self, actor, path):
+        p = self.full(path)
+        if not p.is_file():
+            raise ToolError("no such file " + path)
+        return p.read_text()
 
-    # ---- compensation (used by Phase 2, defined now so the semantics are explicit) ----
-    def reverse_refund(self, ledger_index: int, actor: str = "recovery") -> dict:
-        orig = self.ledger[ledger_index]
-        entry = {"order": orig["order"], "amount": -orig["amount"], "actor": actor,
-                 "step": self.step, "kind": "reversal", "reverses": ledger_index}
-        self.ledger.append(entry)
+    def do_list_files(self, actor):
+        return self.ws.files()
+
+    def do_write_file(self, actor, path, text):
+        p = self.full(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+        name = self.rel(path)
+        return {"path": name, "commit": self.ws.commit(f"step {self.step} {actor}: write {name}")}
+
+    def do_delete_file(self, actor, path):
+        p = self.full(path)
+        if not p.is_file():
+            raise ToolError("no such file " + path)
+        p.unlink()
+        name = self.rel(path)
+        return {"path": name, "commit": self.ws.commit(f"step {self.step} {actor}: delete {name}")}
+
+    def do_run_tests(self, actor):
+        if not (self.ws.path / "tests").is_dir():
+            return {"passed": None, "output": "no tests"}
+        res = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"],
+            cwd=self.ws.path, capture_output=True, text=True, timeout=60,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+        return {"passed": res.returncode == 0, "output": res.stdout[-2000:]}
+
+    def do_publish_release(self, actor, version):
+        entry = {"version": version, "commit": self.ws.head(), "step": self.step, "actor": actor}
+        self.registry.append(entry)
+        return entry
+
+    def do_post_message(self, actor, channel, text):
+        entry = {"channel": channel, "text": text, "step": self.step, "actor": actor}
+        self.channel.append(entry)
         return entry
