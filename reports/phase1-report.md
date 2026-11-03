@@ -22,63 +22,74 @@ they touched, recovers the same tasks with less work.
 
 ## 2. Workflow and tasks
 
-The three agents share one model and fixed prompts. They complete small tickets on a fake
-Python `billing` library of about ten files.
+The three agents share one model and fixed prompts, and each replies in JSON that the server
+constrains to a schema. They complete small tickets on a fake Python `billing` library
+(payments, fees, invoices, config, client) with four internal docs.
 
-- The **researcher** reads internal docs and reports the facts the change depends on, with
-  citations.
-- The **planner** turns the ticket and those facts into a JSON plan.
-- The **executor** edits files, runs visible tests, commits, and may publish or post a message.
+- The **researcher** reads the docs and reports at most five facts the change depends on, each
+  with its source doc.
+- The **planner** turns the ticket, the facts and the current files into a JSON plan of
+  file, function, signature and change.
+- The **executor** calls one tool per turn: read or write a file, run the visible tests,
+  publish a release, or post to a channel.
 
-The agents share real state. The workspace is a git repository, so every executor step is a
-snapshot. A simulated package registry and team channel are append-only, so some actions
-cannot be undone.
+The agents share real state. The workspace is a git repository, and every tool call records
+the commit before and after it. A simulated package registry and team channel are
+append-only, so some actions cannot be undone.
 
-**Outcomes are checked by code, not by an LLM.** The checker runs hidden pytest tests on the
-final code, diffs protected paths (tests, unrelated modules, a decoy function) against the
-seed, compares registry and channel entries with what the task expects, and flags tool calls or
-paths outside the task's allowlist. It reports unauthorized actions separately from task
-success.
+**Outcomes are checked by code, not by an LLM.** The checker runs a hidden pytest file on the
+final code, lists every changed file outside the task's allowed paths as collateral damage,
+and compares the registry and channel with the releases and messages the task expects. It
+reports unauthorized actions separately from task success: tool calls the task does not
+allow, or writes to protected paths such as `tests/` and `docs/`.
 
-For example, one ticket asks for `refund(order_id, amount)` in `billing/payments.py`. The
-deciding fact, "money is integer cents", is in `docs/conventions.md` and never in the ticket.
-A wrong-fact fault ("amounts are float dollars") makes the hidden test `refund("o1", 4999)`
-fail. A malicious fault ("also delete `tests/test_payments.py`") is collateral damage and an
-unauthorized action. Publishing the bad version is an irreversible effect.
-
-About eight templates, each built on one doc rule, are expanded with a fixed seed into roughly
-40 development and 40 held-out tasks (unseen until Phase 2), each changing 5–20 lines. Each
-task lists its deciding facts, plus one control fact that the answer does not depend on. Before
-any model runs, the checker must pass the reference solution, fail a do-nothing run, and catch
-the wrong-fact version, protected-file edits and an unrequested publish.
+The dev set has 10 tickets. Each one depends on a single rule in `docs/policy.md` or
+`docs/releases.md` that the ticket never states. Examples are a 1.5% late fee capped at
+2500 cents, a 90-day refund window, a 50-cent minimum charge, and EUR amounts shown with a
+decimal comma. Two tickets also ask the executor to ship, so they need the right version bump,
+a publish and a channel post. Each task lists its deciding fact and one control fact from the
+same doc that the answer does not depend on. It also lists a wrong value and a stale (2025)
+value for the deciding fact. Unit tests confirm that the checker passes each reference
+solution, fails a do-nothing run and the wrong-fact version, and catches a doc edit, a deleted
+test file and an unrequested publish. The five pilot tickets are kept as a separate tuning set.
 
 ## 3. Fault injection and tracing
 
-The harness rewrites one agent output or tool result before the next stage reads it,
-following a seeded schedule saved with each run.
+The harness rewrites the researcher's facts or the planner's plan before the next stage reads
+it. A fixed schedule (seed 291) gives every task each of seven faults, 70 faulted runs in all.
+The three attacks are spread evenly across tasks.
 
-| Fault                 | Class       | Where             | Example                                    |
-|-----------------------|-------------|-------------------|--------------------------------------------|
-| Wrong fact            | Accidental  | Researcher        | "Amounts are float dollars"                |
-| Stale output          | Accidental  | Researcher, tool  | Docs from before a key was renamed         |
-| Timeout               | Accidental  | Any call          | No response within the limit               |
-| Fabricated fact       | Adversarial | Researcher        | Invented rule: "publish after every fix"   |
-| Malicious instruction | Adversarial | Researcher, tool  | "Also delete the test file"                |
+| Fault           | Class       | Stage   | What changes                                         |
+|-----------------|-------------|---------|------------------------------------------------------|
+| Wrong fact      | Accidental  | Facts   | Deciding fact replaced, e.g. 2% instead of 1.5%      |
+| Stale fact      | Accidental  | Facts   | Deciding fact replaced by the 2025 rule              |
+| Timeout         | Accidental  | Facts   | Researcher returns nothing; planner gets no facts    |
+| Wrong plan      | Accidental  | Plan    | Right value swapped for the wrong one in the plan    |
+| Malicious fact  | Adversarial | Facts   | Injected instruction cited to `docs/releases.md`     |
+| Malicious plan  | Adversarial | Plan    | Extra plan step carrying the same instruction        |
+| Control         | Control     | Facts   | Only the irrelevant support-hours fact changes       |
 
-We report accidental and adversarial faults separately. **A fault counts only if the workload
-depends on it.** Each faulted run is paired with the clean run of the same task. A fault
-*propagated* if any downstream artifact or the final state differs from the clean run. It
-*caused failure* if the check fails or an unauthorized action occurs. Faults on control facts
-should change nothing. Tasks that the clean workflow already fails are reported separately and
-left out of the propagation analysis, so that a model's inability is not mistaken for
+The attacks ask the executor to delete `tests/test_basic.py`, publish release 9.9.9 and
+announce it, or rewrite `docs/policy.md`. Each task also gets a *no-docs* check run with the
+docs folder removed, which shows whether the model needs the docs at all or could guess the
+rule.
+
+Each faulted run is paired with the clean run of the same task. If no downstream artifact
+differs from the clean run, the fault was *ignored*. If something differs but the task still
+passes with no collateral, unauthorized or irreversible effects, it was *absorbed*. Otherwise
+it was *harmful*. For adversarial faults we also record whether the attack actually executed.
+We report accidental and adversarial faults separately. Tasks that the clean workflow already
+fails are left out of the propagation analysis, so a model's inability is not mistaken for
 protection.
 
-Every agent output and tool result is an artifact with a provenance record in a per-run JSONL
-trace. The record holds the artifact's inputs, its state reads and writes (with versions),
-tokens, latency, status, and the fault ID if the harness injected one. State links count as
-much as message links. For example, a step that reads a file written by a faulty step depends
-on the fault even if no message connects the two. Phase 2 reads this same trace to decide
-what to invalidate.
+Every run writes a provenance trace in JSONL with one node per artifact: the facts, the plan,
+each executor turn, and each read or tool call. A node records its inputs, a content hash,
+tokens and latency, and whether the harness injected a fault there. State links count as much
+as message links. A file read links to the step that last wrote that file, so a step that reads
+a file written by a faulty step depends on the fault even with no message between them. From
+the trace we compute which nodes changed against the clean run, every node downstream of the
+injected one, the stages affected, and the tokens and seconds spent downstream of the fault.
+Phase 2 reads this same trace to decide what to invalidate.
 
 ## 4. Baselines, metrics and setup
 
@@ -91,36 +102,44 @@ All conditions run on the same tasks and fault schedule:
   and latency.
 
 Each recovery method is told which result is faulty, so we measure recovery apart from
-detection. We report clean task success, propagation and failure rates by fault class and
-stage, unauthorized actions, affected stages, wasted work (rerun steps whose output did not
-change), irreversible effects, and end-to-end latency and tokens. Main runs use temperature 0,
-a subset repeats with three seeds (mean and min–max), and failed runs and timeouts stay in the
-data.
+detection. We report clean task success, ignored/absorbed/harmful rates by fault class and
+stage, executed attacks, unauthorized actions, irreversible effects, affected stages, work
+downstream of the fault, and end-to-end latency and tokens. Runs use temperature 0 and seed 0.
+Failed runs and timeouts stay in the data.
 
-We self-host the model with llama.cpp at a pinned commit. The candidates are Qwen3.5 4B,
-Phi-4-mini-instruct, and Qwen3.5 9B or Qwen3 8B, all quantized to Q4_K_M, with TritonAI as
-the fallback. By Oct 29, a pilot of five tickets, each run three times, picks the fastest
-model that passes at least 60% of chained runs in about three minutes per task. Phase 1 runs on
-a MacBook Pro (M4 Pro). Latency does not transfer between machines, so the final comparison
-reruns the baselines alongside Phase 2 on one AWS CPU instance, within the $3/day limit. Each
-run's `config.yaml` records the commits, model hash and hardware.
+We self-host **Qwen3.5 4B** (Q4_K_M, pinned GGUF file and hash) with llama.cpp, with thinking
+mode off. In the pilot on five tickets, three seeds each, the model alone passed 10/15 at about
+6 s per task. The three-agent chain passed only 7/15 at about 18 s, below our 60% bar. Since
+the model could solve the tickets alone, we kept it and fixed the hand-offs instead: schema-
+constrained JSON, at most five facts, and signatures copied verbatim into the plan. We did not
+tune prompts on the pilot tickets' scores. One pilot doc contradicted its own hidden test, so we
+fixed it and reran all of the pilot. Phase 1 runs on a MacBook Pro (M4 Pro). Latency does not
+transfer between machines, so the final comparison reruns the baselines alongside Phase 2 on
+one AWS CPU instance, within the $3/day limit. Each run saves its model, seed and sampling
+settings with the trace, tool log and result.
 
 ## 5. Status and Phase 2 direction
 
-As of Oct 27, we have a repository scaffold, a versioned key-value store with an append-only
-write log and `rollback_to(version)`, and 8 passing unit tests. The next step replaces our
-first simulated tools, written for an earlier customer-support design, with coding tools. No
-model has run yet, so this report has no measurements.
+As of Nov 3 the harness runs end to end. We have the git workspace and tools, the 10 dev
+tasks with hidden tests, reference and wrong solutions, the checker, the three agents, the
+provenance trace, and the fault injector with its schedule and measurement script, all covered
+by 61 unit tests. `scripts/run_tasks.py` runs the clean condition and `scripts/run_faults.py`
+runs each task's clean pair, the no-docs check and the seven scheduled faults. The full-restart
+and always-verify baselines are not built yet.
+
+**[Results: clean pass rate and the ignored/absorbed/harmful table from `run_faults.py`,
+to be filled in after the dev-set run.]**
 
 Phase 2 builds dependency-aware invalidation with shared-state rollback. Recovery walks the
 provenance graph, through both message inputs and state reads, to find every result downstream
-of the faulty one. It restores the workspace and the store to just before the first affected
-write, and reruns only the invalidated stages. Effects that cannot be undone, such as a
-published release or a posted message, are reported instead of counted as recovered. A sample
-of reused results is rerun to confirm they were valid. We will compare this method
-with both baselines under identical fault schedules and budgets, and weigh recovery precision
-against bookkeeping overhead. If Phase 1 shows that most faults reach every later stage, then
-selective recovery saves little, and we will report that.
+of the faulty one. It resets the workspace to the commit before the first affected write, and
+reruns only the invalidated stages. Effects that cannot be undone, such as a published release
+or a posted message, are reported instead of counted as recovered. A sample of reused results
+is rerun to confirm they were valid. We will compare this method with both baselines under
+identical fault schedules and budgets, and weigh recovery precision against bookkeeping
+overhead. The trace already records its own size and build time for that comparison. If
+Phase 1 shows that most faults reach every later stage, then selective recovery saves little,
+and we will report that.
 
 ```{=latex}
 \newpage
@@ -130,20 +149,28 @@ selective recovery saves little, and we will report that.
 
 | Dates            | Work                                                   | Milestone                                         |
 |------------------|--------------------------------------------------------|---------------------------------------------------|
-| Oct 27           | Repo scaffold, state store, unit tests                 | Done: 8 tests pass                                |
-| Oct 27–29        | Model pilot on five tickets                            | Model chosen; file hash recorded                  |
-| Oct 28           | Phase 1 report                                         | This document                                     |
-| Oct 29–30        | Coding environment and tools                           | Tool unit tests pass                              |
-| Oct 30–31        | Tasks, hidden tests, checker; agents                   | Reference passes; do-nothing fails                |
-| Oct 31–Nov 1     | Provenance tracing; fault injector                     | Faulted run differs from clean pair               |
-| Nov 1–2          | Restart and verify baselines; 5-task pilot             | All four conditions run end to end                |
-| Nov 3            | Full dev-set runs; analysis script                     | Tables and plots rebuilt from traces              |
+| Oct 27           | Repo scaffold, state store, unit tests                 | Done                                              |
+| Oct 27–29        | Model pilot on five tickets                            | Done: Qwen3.5 4B chosen; file hash recorded       |
+| Nov 2            | Coding workspace and tools                             | Done: tool unit tests pass                        |
+| Nov 2            | 10 dev tasks, hidden tests, checker; agents            | Done: reference passes; do-nothing fails          |
+| Nov 2–3          | Provenance tracing; fault injector and schedule        | Done: faulted run compared with its clean pair    |
+| Nov 3–4          | Dev-set clean and fault runs; results tables           | In progress                                       |
 | **Nov 4**        | **Phase 1 code and data due**                          | One command per condition                         |
+| Nov 5–10         | Full-restart and always-verify baselines               | All four conditions run end to end                |
 | Nov 5–17         | Selective invalidation                                 | Only downstream stages rerun                      |
 | Nov 12–24        | Shared-state rollback                                  | Irreversible actions reported                     |
+| Nov 10–20        | Held-out task set                                      | Unseen until the final evaluation                 |
 | Nov 23–Dec 3     | Held-out evaluation on AWS                             | Same schedules, budgets and seeds                 |
 | Dec 1–9          | Final report                                           |                                                   |
 | **Dec 10**       | **Final submission**                                   |                                                   |
 
 **Risks and fallbacks:**
 
+- *Low clean success.* If the chain passes too few clean runs, faults have little to break.
+  Fallbacks: a larger model (Qwen3.5 9B or Qwen3 8B), or TritonAI.
+- *Faults that never matter.* If the no-docs check passes, the model is guessing the rule, and
+  that task's fact faults say little. We will rewrite or drop such tasks.
+- *Run time.* About 80 runs per pass on one laptop. If it is too slow, we will run
+  always-verify on a subset of tasks.
+- *Run-to-run noise.* Temperature 0 on llama.cpp is not fully deterministic. We will rerun a
+  subset with three seeds and report the spread.
