@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 from agents.llm import LLM
+from fakes import DONE, FakeLLM
 from agents.run import run_task
 from tasks.schema import TASKS_DIR, load_tasks
 
@@ -13,25 +14,6 @@ PLAN = json.dumps({"steps": [{"file": "billing/payments.py", "function": "charge
                               "new_signature": "def charge(client, amount_cents, currency, idempotency_key=None):",
                               "change": "raise amount_too_small under 50 cents"}]})
 WRITE = '{"tool": "write_file", "path": "billing/payments.py"}\n```python\n' + FIX + "```"
-DONE = '{"tool": "done"}'
-
-
-class FakeLLM:
-    model = "fake"
-    seed = 0
-    temperature = 0.0
-    max_tokens = 0
-
-    def __init__(self, replies):
-        self.replies = list(replies)
-        self.seen = []
-
-    def chat(self, messages, schema=None):
-        self.seen.append({"messages": [dict(m) for m in messages], "schema": schema})
-        reply = self.replies.pop(0) if self.replies else DONE
-        return reply, {"wall_s": 0.0, "prompt_tokens": 1, "completion_tokens": 1, "finish_reason": "stop"}
-
-
 def text_of(call):
     return "\n".join(m["content"] for m in call["messages"])
 
@@ -136,3 +118,9 @@ def test_parser_accepts_content_key_and_bare_code_block():
     assert action is None and err.startswith("start your reply")
     action, err = parse_action(WRITE, targets)
     assert action["text"] == FIX
+
+
+def test_executor_feedback_has_no_commit_ids(tmp_path):
+    llm = FakeLLM([FACTS, PLAN, WRITE, DONE])
+    run_task(TASK, llm, tmp_path / "run")
+    assert "commit" not in llm.seen[3]["messages"][-1]["content"]

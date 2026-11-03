@@ -6,6 +6,7 @@ from agents.executor import execute
 from agents.planner import plan_change
 from agents.researcher import research
 from env.tools import Environment
+from env.trace import build_trace
 from env.workspace import Workspace
 from eval.check import check
 from tasks.schema import TASKS_DIR
@@ -58,5 +59,13 @@ def run_task(task, llm, run_dir, hook=None):
     (run_dir / "artifacts.json").write_text(json.dumps({"facts": facts, "plan": plan, "actions": actions}, indent=2))
     save_jsonl(run_dir / "llm_calls.jsonl", calls)
     save_jsonl(run_dir / "tool_log.jsonl", env.log)
+    t0 = time.time()
+    nodes = build_trace(env.log, calls, actions, facts, plan)
+    save_jsonl(run_dir / "trace.jsonl", nodes)
+    res["trace"] = {
+        "nodes": len(nodes),
+        "bytes": (run_dir / "trace.jsonl").stat().st_size + (run_dir / "tool_log.jsonl").stat().st_size,
+        "build_ms": round((time.time() - t0) * 1000, 2),
+    }
     (run_dir / "result.json").write_text(json.dumps(res, indent=2, default=str))
     return res

@@ -49,15 +49,20 @@ def execute(env, llm, task, plan, facts):
         if action and action["tool"] == "done":
             actions.append({"turn": turn, "tool": "done"})
             break
+        log_i = None
         if error:
             feedback = "Error: " + error
         else:
             args = {k: v for k, v in action.items() if k != "tool"}
+            log_i = len(env.log)
             try:
                 result = env.call(action["tool"], "executor", **args)
+                if isinstance(result, dict):
+                    result = {k: v for k, v in result.items() if k != "commit"}
                 feedback = "Result: " + json.dumps(result)[:1000]
             except ToolError as e:
                 feedback = "Error: " + str(e)
-        actions.append({"turn": turn, "tool": action["tool"] if action else None, "feedback": feedback[:300]})
+        actions.append({"turn": turn, "tool": action["tool"] if action else None, "log_i": log_i,
+                        "feedback": feedback[:300]})
         messages.append({"role": "user", "content": feedback})
     return actions, calls
