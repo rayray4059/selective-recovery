@@ -101,6 +101,9 @@ def test_run_tests(tmp_path):
     assert res["passed"] is True and "1 passed" in res["output"] and "s\n" not in res["output"]
     add_tests(env, "assert add(2, 3) == 6")
     assert env.call("run_tests", "executor")["passed"] is False
+    env.call("write_file", "executor", path="tests/test_money.py", text="from billing.money import nope\n")
+    res = env.call("run_tests", "executor")
+    assert "test_money.py" in res["output"] and str(tmp_path) not in res["output"]
     assert env.ws.git("status", "--porcelain") == ""
 
 
