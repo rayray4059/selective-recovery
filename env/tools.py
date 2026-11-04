@@ -102,7 +102,7 @@ class Environment:
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )
         output = re.sub(r" in [0-9.]+s", "", res.stdout)
-        for root in {str(self.ws.path), str(self.ws.path.resolve())}:
+        for root in sorted({str(self.ws.path.absolute()), str(self.ws.path.resolve()), str(self.ws.path)}, key=len, reverse=True):
             output = output.replace(root + "/", "").replace(root, ".")
         return {"passed": res.returncode == 0, "output": output[-2000:]}
 

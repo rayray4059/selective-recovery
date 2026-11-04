@@ -43,7 +43,7 @@ def main():
     except Exception:
         sys.exit("llama-server isn't running at " + args.url)
 
-    out = Path(args.old) if args.old else ROOT / "runs" / f"{args.tag}_{datetime.now():%Y%m%d_%H%M%S}"
+    out = Path(args.old).resolve() if args.old else ROOT / "runs" / f"{args.tag}_{datetime.now():%Y%m%d_%H%M%S}"
     out.mkdir(parents=True, exist_ok=True)
     save_batch_info(out, args)
     files = {"faults": open(out.parent / f"{out.name}_summary.jsonl", "a")}

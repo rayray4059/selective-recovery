@@ -104,6 +104,15 @@ def test_run_tests(tmp_path):
     env.call("write_file", "executor", path="tests/test_money.py", text="from billing.money import nope\n")
     res = env.call("run_tests", "executor")
     assert "test_money.py" in res["output"] and str(tmp_path) not in res["output"]
+
+
+def test_run_tests_hides_relative_workspace_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "src" / "tests").mkdir(parents=True)
+    (tmp_path / "src" / "tests" / "test_x.py").write_text("import nope\n")
+    env = Environment(Workspace(Path("runs") / "ws", source=tmp_path / "src"))
+    out = env.call("run_tests", "executor")["output"]
+    assert "tests/test_x.py" in out and str(tmp_path) not in out and "/tests/test_x.py" not in out
     assert env.ws.git("status", "--porcelain") == ""
 
 
