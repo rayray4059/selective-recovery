@@ -1,12 +1,3 @@
-"""Pilot Test B: three chained prompts. A researcher reads the docs and reports facts, a
-planner turns facts and the current file into a JSON plan, and an executor, which never sees
-the docs, writes the new file from the plan. Then the hidden test runs.
-
-Needs llama-server running on port 8080.
-Usage: python3 scripts/pilot/test_b.py [--runs 3] [--tickets t1_config_timeout,t5_retry]
-"""
-from __future__ import annotations
-
 import argparse
 import json
 import re
@@ -63,7 +54,7 @@ EXECUTOR = (
 )
 
 
-def ask(client: OpenAI, model: str, system: str, user: str, seed: int) -> tuple[str, dict]:
+def ask(client, model, system, user, seed):
     start = time.time()
     resp = client.chat.completions.create(
         model=model,
@@ -78,8 +69,8 @@ def ask(client: OpenAI, model: str, system: str, user: str, seed: int) -> tuple[
     return resp.choices[0].message.content or "", stats
 
 
-def parse_json(reply: str, schema: type[BaseModel]) -> BaseModel | None:
-    """Parse the reply as JSON, allowing a ```json fence or text around the object."""
+def parse_json(reply, schema):
+    # reply can have a ```json fence or text around it
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", reply.strip())
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end < start:
@@ -90,19 +81,19 @@ def parse_json(reply: str, schema: type[BaseModel]) -> BaseModel | None:
         return None
 
 
-def ticket_text(ticket: dict) -> str:
+def ticket_text(ticket):
     return f"## Ticket: {ticket['title']}\n\n{ticket['body']}\n\nTarget file: {ticket['target_file']}"
 
 
-def current_file(ticket: dict) -> str:
+def current_file(ticket):
     target = ticket["target_file"]
     return f"## Current {target}\n\n```python\n{(CODEBASE / target).read_text()}```"
 
 
-def run_one(client: OpenAI, model: str, ticket: dict, seed: int) -> dict:
+def run_one(client, model, ticket, seed):
     row = {"ticket": ticket["id"], "seed": seed, "passed": False, "agents": {}}
 
-    def finish(outcome: str) -> dict:
+    def finish(outcome):
         row["outcome"] = outcome
         row["wall_s"] = round(sum(a["wall_s"] for a in row["agents"].values()), 2)
         return row
@@ -140,7 +131,7 @@ def run_one(client: OpenAI, model: str, ticket: dict, seed: int) -> dict:
     return finish(classify(code, row["passed"]))
 
 
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--tickets", default="", help="comma-separated ticket ids (default: all)")

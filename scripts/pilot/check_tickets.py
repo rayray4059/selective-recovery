@@ -1,10 +1,3 @@
-"""Sanity-check the pilot tickets: each hidden test must fail on the original codebase and
-pass once the ticket's reference solution is applied.
-
-Usage: python3 scripts/pilot/check_tickets.py
-"""
-from __future__ import annotations
-
 import json
 import shutil
 import subprocess
@@ -15,8 +8,7 @@ from pathlib import Path
 PILOT = Path(__file__).resolve().parent
 
 
-def run_pytest(workspace: Path, test_file: Path) -> subprocess.CompletedProcess:
-    """Copy the test into the workspace and run it with pytest."""
+def run_pytest(workspace, test_file):
     shutil.copy(test_file, workspace / test_file.name)
     return subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", test_file.name],
@@ -24,18 +16,17 @@ def run_pytest(workspace: Path, test_file: Path) -> subprocess.CompletedProcess:
     )
 
 
-def run_hidden_test(workspace: Path, test_file: Path) -> bool:
-    """Return True if the hidden test passes in the workspace."""
+def run_hidden_test(workspace, test_file):
     return run_pytest(workspace, test_file).returncode == 0
 
 
-def fresh_workspace(root: Path) -> Path:
+def fresh_workspace(root):
     workspace = root / "ws"
     shutil.copytree(PILOT / "codebase", workspace)
     return workspace
 
 
-def main() -> int:
+def main():
     tickets = [json.loads(line) for line in (PILOT / "tickets.jsonl").read_text().splitlines() if line]
     ok = True
     for t in tickets:

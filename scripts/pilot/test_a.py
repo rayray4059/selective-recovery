@@ -1,11 +1,3 @@
-"""Pilot Test A: the model alone. For each ticket, send the docs, the target file and the
-ticket in one prompt, write the returned file into a fresh workspace, and run the hidden test.
-
-Needs llama-server running on port 8080.
-Usage: python3 scripts/pilot/test_a.py [--runs 3] [--tickets t1_config_timeout,t5_retry]
-"""
-from __future__ import annotations
-
 import argparse
 import json
 import re
@@ -32,7 +24,7 @@ SYSTEM = (
 CODE_BLOCK = re.compile(r"```(?:python)?\n(.*?)```", re.DOTALL)
 
 
-def build_prompt(ticket: dict) -> str:
+def build_prompt(ticket):
     docs = PILOT / "codebase" / "docs"
     target = ticket["target_file"]
     parts = [f"## {p.name}\n\n{p.read_text()}" for p in sorted(docs.glob("*.md"))]
@@ -42,7 +34,7 @@ def build_prompt(ticket: dict) -> str:
     return "\n\n".join(parts)
 
 
-def classify(code: str | None, passed: bool) -> str:
+def classify(code, passed):
     if passed:
         return "pass"
     if code is None:
@@ -54,7 +46,7 @@ def classify(code: str | None, passed: bool) -> str:
     return "wrong_behavior"
 
 
-def run_one(client: OpenAI, model: str, ticket: dict, seed: int) -> dict:
+def run_one(client, model, ticket, seed):
     start = time.time()
     resp = client.chat.completions.create(
         model=model,
@@ -85,7 +77,7 @@ def run_one(client: OpenAI, model: str, ticket: dict, seed: int) -> dict:
     }
 
 
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--tickets", default="", help="comma-separated ticket ids (default: all)")
