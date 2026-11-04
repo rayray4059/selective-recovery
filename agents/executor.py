@@ -14,10 +14,17 @@ def parse_action(reply, targets):
     code = CODE_BLOCK.search(reply)
     head = reply.split("```")[0]
     action = None
+    in_block = False
     for body in (reply.strip(), head[head.find("{"):head.rfind("}") + 1]):
         try:
             action = json.loads(body)
             break
+        except json.JSONDecodeError:
+            pass
+    if action is None and code and code.group(1).strip().startswith('{"tool"'):
+        try:
+            action = json.loads(code.group(1).strip())
+            in_block = True
         except json.JSONDecodeError:
             pass
     if action is None:
@@ -29,7 +36,7 @@ def parse_action(reply, targets):
     if "content" in action and "text" not in action:
         action["text"] = action.pop("content")
     if action["tool"] == "write_file" and "text" not in action:
-        if not code:
+        if not code or in_block:
             return None, "write_file needs the whole file in a ```python block after the JSON line"
         action["text"] = code.group(1)
     return action, None

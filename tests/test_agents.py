@@ -120,6 +120,17 @@ def test_parser_accepts_content_key_and_bare_code_block():
     assert action["text"] == FIX
 
 
+def test_parser_reads_json_inside_code_block():
+    from agents.executor import parse_action
+    targets = ["billing/client.py"]
+    fenced = "```python\n" + json.dumps({"tool": "write_file", "path": "billing/client.py", "content": "x = 1\n"}) + "\n```"
+    assert parse_action(fenced, targets)[0] == {"tool": "write_file", "path": "billing/client.py", "text": "x = 1\n"}
+    action, _ = parse_action('```python\n{"tool": "read_file", "path": "billing/__init__.py"}\n```', targets)
+    assert action == {"tool": "read_file", "path": "billing/__init__.py"}
+    action, err = parse_action('```python\n{"tool": "write_file", "path": "billing/client.py"}\n```', targets)
+    assert action is None and "write_file needs" in err
+
+
 def test_executor_feedback_has_no_commit_ids(tmp_path):
     llm = FakeLLM([FACTS, PLAN, WRITE, DONE])
     run_task(TASK, llm, tmp_path / "run")
