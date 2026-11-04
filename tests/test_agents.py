@@ -129,6 +129,8 @@ def test_parser_reads_json_inside_code_block():
     assert action == {"tool": "read_file", "path": "billing/__init__.py"}
     action, err = parse_action('```python\n{"tool": "write_file", "path": "billing/client.py"}\n```', targets)
     assert action is None and "write_file needs" in err
+    action, err = parse_action('```python\n{"tool": "write_file", "path": "billing/client.py", "content": "bad\n}\n```', targets)
+    assert action is None and "not valid" in err
 
 
 def test_executor_feedback_has_no_commit_ids(tmp_path):

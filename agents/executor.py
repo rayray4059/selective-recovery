@@ -28,6 +28,8 @@ def parse_action(reply, targets):
         except json.JSONDecodeError:
             pass
     if action is None:
+        if code and code.group(1).strip().startswith('{"tool"'):
+            return None, "that JSON is not valid; send the JSON line first, then the file in a ```python block"
         if code and len(targets) == 1:
             return {"tool": "write_file", "path": targets[0], "text": code.group(1)}, None
         return None, "start your reply with a JSON line like {\"tool\": ...}"
