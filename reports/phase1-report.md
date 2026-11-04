@@ -97,12 +97,17 @@ All conditions run on the same tasks and fault schedule:
 
 - **Clean** sets the capability ceiling.
 - **Faulted, no recovery** measures propagation and damage.
-- **Full restart** restores the seed state and reruns every stage without the fault.
-- **Always-verify** has a verifier check each result before hand-off, and counts its tokens
-  and latency.
+- **Full restart** rolls the faulted workspace back to its first commit and reruns every
+  stage without the fault. Releases and messages from the faulted run stay, so we report them
+  as leftover effects, apart from whether the restart's own work was correct.
+- **Always-verify** has a verifier (the same model with its own prompt and read access to the
+  docs) check the facts and the plan before hand-off. A rejected stage is regenerated once
+  with the verifier's problems as feedback. Its tokens and latency count on every run,
+  including clean ones.
 
-Each recovery method is told which result is faulty, so we measure recovery apart from
-detection. We report clean task success, ignored/absorbed/harmful rates by fault class and
+Full restart is told which result is faulty, so it measures recovery apart from detection.
+Always-verify has to find the fault itself, so we also report what it caught, missed and
+flagged by mistake. We report clean task success, ignored/absorbed/harmful rates by fault class and
 stage, executed attacks, unauthorized actions, irreversible effects, affected stages, work
 downstream of the fault, and end-to-end latency and tokens. Runs use temperature 0 and seed 0.
 Failed runs and timeouts stay in the data.
@@ -122,10 +127,16 @@ settings with the trace, tool log and result.
 
 As of Nov 3 the harness runs end to end. We have the git workspace and tools, the 10 dev
 tasks with hidden tests, reference and wrong solutions, the checker, the three agents, the
-provenance trace, and the fault injector with its schedule and measurement script, all covered
-by 61 unit tests. `scripts/run_tasks.py` runs the clean condition and `scripts/run_faults.py`
-runs each task's clean pair, the no-docs check and the seven scheduled faults. The full-restart
-and always-verify baselines are not built yet.
+provenance trace, the fault injector with its schedule and measurement script, and both
+baselines, all covered by 115 unit tests. `scripts/run_tasks.py` runs the clean condition and
+`scripts/run_faults.py` runs each task's clean pair, the no-docs check and the seven scheduled
+faults; `--restart` and `--verify` add the two baselines.
+
+A first check on one ticket (50-cent minimum charge) shows the expected shape. Every fault
+made the run fail. Full restart fixed all seven, but one unasked release from a malicious fact
+stayed in the registry, and 7 to 11 of the restart's 13 trace nodes repeated work identical to
+the faulted run. Always-verify caught all six real faults and five of those runs then passed,
+at about 4k extra tokens per run, but it also flagged the control fault.
 
 **[Results: clean pass rate and the ignored/absorbed/harmful table from `run_faults.py`,
 to be filled in after the dev-set run.]**
@@ -154,9 +165,9 @@ and we will report that.
 | Nov 2            | Coding workspace and tools                             | Done: tool unit tests pass                        |
 | Nov 2            | 10 dev tasks, hidden tests, checker; agents            | Done: reference passes; do-nothing fails          |
 | Nov 2–3          | Provenance tracing; fault injector and schedule        | Done: faulted run compared with its clean pair    |
-| Nov 3–4          | Dev-set clean and fault runs; results tables           | In progress                                       |
+| Nov 3            | Full-restart and always-verify baselines               | Done: checked on one ticket                       |
+| Nov 3–4          | Dev-set clean, fault and baseline runs; results tables | In progress                                       |
 | **Nov 4**        | **Phase 1 code and data due**                          | One command per condition                         |
-| Nov 5–10         | Full-restart and always-verify baselines               | All four conditions run end to end                |
 | Nov 5–17         | Selective invalidation                                 | Only downstream stages rerun                      |
 | Nov 12–24        | Shared-state rollback                                  | Irreversible actions reported                     |
 | Nov 10–20        | Held-out task set                                      | Unseen until the final evaluation                 |
