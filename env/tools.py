@@ -1,11 +1,12 @@
 import os
+import re
 import subprocess
 import sys
 import time
 
 READ_TOOLS = {"read_file", "list_files"}
 ALL_TOOLS = READ_TOOLS | {"write_file", "delete_file", "run_tests", "publish_release", "post_message"}
-ALLOWED = {"researcher": READ_TOOLS, "planner": READ_TOOLS, "executor": ALL_TOOLS}
+ALLOWED = {"researcher": READ_TOOLS, "planner": READ_TOOLS, "executor": ALL_TOOLS, "verifier": READ_TOOLS}
 PROTECTED = ("docs/", "tests/")
 
 
@@ -100,7 +101,8 @@ class Environment:
             cwd=self.ws.path, capture_output=True, text=True, timeout=60,
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )
-        return {"passed": res.returncode == 0, "output": res.stdout[-2000:]}
+        output = re.sub(r" in [0-9.]+s", "", res.stdout)
+        return {"passed": res.returncode == 0, "output": output[-2000:]}
 
     def do_publish_release(self, actor, version):
         entry = {"version": version, "commit": self.ws.head(), "step": self.step, "actor": actor}

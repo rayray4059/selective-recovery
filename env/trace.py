@@ -53,7 +53,7 @@ def build_trace(log, calls=(), actions=(), facts=None, plan=None, injected=None)
 
     def make_facts():
         if "facts" not in made and llm["researcher"]:
-            call = llm["researcher"][0]
+            call = llm["researcher"][-1]
             made["facts"] = add("facts", "researcher", 1, "facts", reads["researcher"],
                                 facts if facts is not None else call["reply"], call=call)
             if "facts" in injected:
@@ -62,7 +62,7 @@ def build_trace(log, calls=(), actions=(), facts=None, plan=None, injected=None)
     def make_plan():
         make_facts()
         if "plan" not in made and llm["planner"]:
-            call = llm["planner"][0]
+            call = llm["planner"][-1]
             made["plan"] = add("plan", "planner", 2, "plan", [made.get("facts")] + reads["planner"],
                                plan if plan is not None else call["reply"], call=call)
             if "plan" in injected:

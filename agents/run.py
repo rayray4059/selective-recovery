@@ -6,6 +6,7 @@ from pathlib import Path
 from agents.executor import execute
 from agents.planner import plan_change
 from agents.researcher import research
+from agents.verifier import check_stage
 from env.tools import Environment
 from env.trace import build_trace
 from env.workspace import Workspace
@@ -31,16 +32,18 @@ def agent_totals(calls):
     return totals
 
 
-def run_task(task, llm, run_dir, hook=None, fault=None):
+def run_task(task, llm, run_dir, hook=None, fault=None, env=None, verify=False):
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
-    env = Environment(Workspace(run_dir / "ws", source=TASKS_DIR / task.codebase))
+    if env is None:
+        env = Environment(Workspace(run_dir / "ws", source=TASKS_DIR / task.codebase))
     if fault:
         hook = fault.hook
         fault.setup(env)
     hook = hook or (lambda stage, x: x)
     label = fault.name if fault else "hook"
     injected = {}
+    checks = []
     start = time.time()
 
     env.step = 1
@@ -49,6 +52,13 @@ def run_task(task, llm, run_dir, hook=None, fault=None):
     facts = hook("facts", facts)
     if facts != before:
         injected["facts"] = label
+    if verify:
+        ok, problems, more = check_stage(env, llm, task, "facts", facts)
+        calls += more
+        checks.append({"stage": "facts", "ok": ok, "problems": problems, "redone": not ok})
+        if not ok:
+            facts, more = research(env, llm, task, feedback=problems)
+            calls += more
     env.step = 2
     plan, more = plan_change(env, llm, task, facts)
     calls += more
@@ -56,6 +66,13 @@ def run_task(task, llm, run_dir, hook=None, fault=None):
     plan = hook("plan", plan)
     if plan != before:
         injected["plan"] = label
+    if verify:
+        ok, problems, more = check_stage(env, llm, task, "plan", facts, plan)
+        calls += more
+        checks.append({"stage": "plan", "ok": ok, "problems": problems, "redone": not ok})
+        if not ok:
+            plan, more = plan_change(env, llm, task, facts, feedback=problems)
+            calls += more
     env.step = 3
     actions, more = execute(env, llm, task, plan, facts)
     calls += more
@@ -65,9 +82,11 @@ def run_task(task, llm, run_dir, hook=None, fault=None):
     res.update({"task": task.id, "wall_s": wall_s, "agents": agent_totals(calls),
                 "registry": env.registry, "channel": env.channel,
                 "fault": fault.info() if fault else None, "injected": injected})
+    if verify:
+        res["verify"] = checks
     (run_dir / "config.json").write_text(json.dumps({
         "task": task.id, "model": llm.model, "seed": llm.seed,
-        "temperature": llm.temperature, "max_tokens": llm.max_tokens,
+        "temperature": llm.temperature, "max_tokens": llm.max_tokens, "verify": verify,
     }, indent=2))
     (run_dir / "artifacts.json").write_text(json.dumps({"facts": facts, "plan": plan, "actions": actions}, indent=2))
     save_jsonl(run_dir / "llm_calls.jsonl", calls)

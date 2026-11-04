@@ -4,8 +4,11 @@ from pathlib import Path
 
 
 class Workspace:
-    def __init__(self, path, source=None):
+    def __init__(self, path, source=None, existing=False):
         self.path = Path(path)
+        if existing:
+            self.init_commit = self.git("rev-list", "--max-parents=0", "HEAD")
+            return
         if source:
             shutil.copytree(source, self.path)
         else:
