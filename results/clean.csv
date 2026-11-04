@@ -6,6 +6,6 @@ t01_late_fee,True,6878,19.3,False
 t04_currency,True,6246,17.48,True
 t05_invoice_tax,False,5151,16.97,False
 t06_eur_format,True,7320,28.13,False
-t07_timeout_cap,False,9490,20.34,False
+t07_timeout_cap,False,10058,25.56,False
 t08_region_currency,True,8205,20.93,False
-t09_ship_fix,False,12374,33.15,False
+t09_ship_fix,False,10776,23.65,False

@@ -87,3 +87,14 @@ def test_verify_labels(tmp_path):
     assert clean["false_alarm"] and clean["redo_tokens"] == 2
     ctrl = verify_row(tmp_path / "control", tmp_path / "ctrl")
     assert ctrl["control_flag"] and not ctrl["false_alarm"]
+
+
+def test_ignored_means_same_final_state_and_mechanism(tmp_path):
+    run(tmp_path, "clean", [FACTS, PLAN, WRITE, DONE])
+    run(tmp_path, "ctrl", [FACTS, PLAN, '{"tool": "read_file", "path": "billing/payments.py"}', WRITE, DONE],
+        Fault(TASK, "control"))
+    run(tmp_path, "crash", [FACTS, PLAN, BROKEN, DONE], Fault(TASK, "wrong_fact"))
+    row = fault_row(tmp_path / "clean", tmp_path / "ctrl")
+    assert row["outcome"] == "ignored" and row["same_final"] and row["outcome_trace"] != "ignored"
+    row = fault_row(tmp_path / "clean", tmp_path / "crash")
+    assert row["outcome"] == "harmful" and row["mechanism"] == "crash"

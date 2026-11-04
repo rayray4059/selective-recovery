@@ -46,11 +46,16 @@ def make_tables(clean, faults, restarts, verifies, over):
     for f in FAULTS:
         a = [r for r in faults if r["fault"] == f and r["task"] in ok]
         b = [r for r in faults if r["fault"] == f and r["task"] not in ok]
+        h = [r for r in a if r["outcome"] == "harmful"]
         rows.append([f, a[0]["kind"] if a else "", len(a), sum(r["outcome"] == "ignored" for r in a),
-                     sum(r["outcome"] == "absorbed" for r in a), sum(r["outcome"] == "harmful" for r in a),
+                     sum(r["outcome"] == "absorbed" for r in a), len(h),
+                     sum(r["mechanism"] == "wrong_behavior" for r in h), sum(r["mechanism"] == "crash" for r in h),
+                     sum(r["mechanism"] == "attack" for r in h), sum(r["mechanism"] == "side_effect" for r in h),
                      len(b), sum(r["outcome"] == "new_harm" for r in b)])
-    out.append(table(f"2. Outcomes by fault (clean-passing tickets, n={len(ok)}; clean-failed counted separately)",
-                     ["fault", "kind", "n", "ignored", "absorbed", "harmful", "n_failed", "new_harm"], rows))
+    out.append(table(f"2. Outcomes by fault (clean-passing tickets, n={len(ok)}; ignored = same final files, releases "
+                     "and posts as the clean run; harmful split by how it failed)",
+                     ["fault", "kind", "n", "ignored", "absorbed", "harmful", "wrong_behavior", "crash", "attack",
+                      "side_effect", "n_failed", "new_harm"], rows))
 
     rows = []
     for att in ["delete_tests", "publish", "edit_docs"]:
@@ -85,11 +90,13 @@ def make_tables(clean, faults, restarts, verifies, over):
         rows.append([f, len(a), sum(r["own_passed"] for r in p), sum(r["passed"] for r in p), len(p),
                      sum(bool(r["leftover_publish"]) for r in a), sum(r["leftover_messages"] > 0 for r in a),
                      mean([r["restart_tokens"] for r in a]), mean([r["restart_s"] for r in a]),
+                     mean([r["total_tokens"] for r in p]), mean([r["total_s"] for r in p]),
                      mean([r["reusable_tokens"] for r in a]),
                      mean([100 * r["reusable_tokens"] / r["restart_tokens"] for r in a]),
                      sum(r["same_as_clean"] for r in a)])
     out.append(table("5. Full restart (own/strict pass over clean-passing tickets; reusable = identical and upstream of the fault)",
                      ["fault", "n", "own_pass", "strict_pass", "of", "left_publish", "left_post", "tokens", "s",
+                      "with_fault_tok", "with_fault_s",
                       "reusable_tok", "reusable_%", "same_as_clean"], rows))
 
     rows = []
@@ -103,6 +110,20 @@ def make_tables(clean, faults, restarts, verifies, over):
     out.append(table("6. Always-verify (" + ",".join(sorted({r["task"][:3] for r in verifies})) + "; flags on clean = false alarm, on control = flagged irrelevant change)",
                      ["fault", "n", "caught", "late", "missed", "post_redo", "flag_clean/ctrl", "pass", "pass_unverified",
                       "attack_ran", "verify_tok", "extra_tok", "extra_s"], rows))
+    rows = []
+    for t in sorted({r["task"] for r in verifies}):
+        a = [r for r in verifies if r["task"] == t]
+        good = [r for r in a if r["kind"] in ("clean", "control")]
+        bad_facts = [r for r in a if r["fault"] in ("wrong_fact", "stale_fact", "timeout", "malicious_facts")]
+        bad_plan = [r for r in a if r["fault"] in ("wrong_plan", "malicious_plan")]
+        rows.append([t, f'{sum("facts" in r["flagged"] for r in good)}/{len(good)}',
+                     f'{sum("facts" in r["flagged"] for r in bad_facts)}/{len(bad_facts)}',
+                     f'{sum("plan" in r["flagged"] for r in good)}/{len(good)}',
+                     f'{sum("plan" in r["flagged"] for r in bad_plan)}/{len(bad_plan)}',
+                     mean([r["plain_tokens"] for r in a if r["kind"] == "clean"]),
+                     mean([r["total_tokens"] for r in a])])
+    out.append(table("6b. Verifier flags per ticket (ok = clean+control runs, bad = runs with a fault at that stage) and tokens vs the same ticket's clean run",
+                     ["task", "facts_flag_ok", "facts_flag_bad", "plan_flag_ok", "plan_flag_bad", "clean_tok", "verified_tok"], rows))
 
     rows = []
     for k in ["clean", "fault", "restart", "verify"]:
