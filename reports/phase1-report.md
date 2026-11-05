@@ -2,12 +2,13 @@
 title: "Selective Recovery in a Multi-Agent Coding Workflow"
 subtitle: "CSE 291A Fall 2026, Option 5 · Phase 1 Report · November 4, 2026"
 author: "Jackie Wang, Ray Williams"
+date: "Code and data: github.com/rayray4059/selective-recovery"
 geometry: margin=0.75in
 fontsize: 10pt
 header-includes:
   - \usepackage{titling}
   - \setlength{\droptitle}{-6em}
-  - \postdate{\par\end{center}\vspace{-2.5em}}
+  - \postdate{\par\end{center}\vspace{-1.5em}}
 ---
 
 ## Abstract
@@ -64,8 +65,9 @@ Tickets the clean workflow fails are excluded, so failure is not mistaken for pr
 **Baselines.** Full restart is told which result is faulty, resets the files to the first commit
 and reruns every stage. Always-verify must find faults itself: a verifier using the same model
 checks the facts and the plan before each hand-off and sends a rejected stage back once. It ran
-on four tickets because it more than doubles run time. A parser bug fixed on Nov 4 changed 53 of
-192 runs, and every number below can be rebuilt from the saved traces.
+on four tickets because it more than doubles run time. Runs that hit a parser bug were rerun
+after the fix, together with their restarts; only 2 of them changed pass/fail. Every number below can be rebuilt
+from the saved traces.
 
 ## 2. Evaluation
 
@@ -133,7 +135,7 @@ only the affected files, and compare all three methods on a held-out set.
 | Nov 2–3          | Provenance tracing; fault injector and schedule        | Done: faulted run compared with its clean pair    |
 | Nov 3            | Full-restart and always-verify baselines               | Done: restart on all tickets; verify on four      |
 | Nov 3–4          | Dev-set clean, fault and baseline runs; results tables | Done: tables in `results/`                        |
-| Nov 4            | Executor parser fix; affected tickets rerun            | Done: 53 of 192 runs changed                      |
+| Nov 4            | Executor parser fix; affected tickets rerun            | Done: 2 runs changed pass/fail                    |
 | **Nov 4**        | **Phase 1 code and data due**                          | One command per condition                         |
 | Nov 5–17         | Fact-level provenance; selective invalidation          | Only steps that cite a bad fact rerun             |
 | Nov 10–20        | Held-out set, multi-part and multi-ticket tasks        | Unseen until the final evaluation                 |
